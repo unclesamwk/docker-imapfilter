@@ -1,13 +1,16 @@
 # docker-imapfilter
 
-A (hopefully) small Docker image for running imapfilter
+A forked small Docker image for running imapfilter from bbriggs/docker-imapfilter
+
+### Create Container
+
+`docker build -t anyone/imapfilter .`
 
 ### Usage
 
-Fires a one-time run of imapfilter. I intended this to be run on a cron with a non-daemonized imapfilter config.
+Modify the config.lua first
 
-`docker run -it --rm -v $(pwd):/root/.imapfilter/ bbriggs/imapfilter`
+Fires a ( NOT a one-time ) run of imapfilter.
+Every 60 seconds starts an imapfilter run.
 
-### License
-
-Released under the MIT license.
+`docker run -it -d -v $(pwd):/root/.imapfilter/ --name imapfilter anyone/imapfilter`

@@ -1,6 +1,7 @@
 FROM alpine:latest
+MAINTAINER Samuel Warkenin <unclesamwk@googlemailc.com>
 
-RUN apk add --update git lua-dev gcc make openssl-dev pcre-dev g++
+RUN apk add --update git lua-dev gcc make openssl-dev pcre-dev g++ bash
 
 WORKDIR /root
 
@@ -12,4 +13,6 @@ RUN make all
 RUN make install
 RUN mkdir /root/.imapfilter
 
-CMD imapfilter
+ADD run.sh /run.sh
+
+CMD bash /run.sh
