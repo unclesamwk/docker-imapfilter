@@ -1,7 +1,7 @@
 FROM alpine:latest
 MAINTAINER Samuel Warkenin <unclesamwk@googlemailc.com>
 
-RUN apk add --update git lua-dev gcc make openssl-dev pcre-dev g++ bash
+RUN apk add --update git lua-dev gcc make openssl-dev pcre-dev g++ bash curl jq
 
 WORKDIR /root
 
