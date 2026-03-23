@@ -45,7 +45,7 @@ docker run -d \
   -e IMAP_SERVER=imap.example.com \
   -e IMAP_USER=alice@example.com \
   -e IMAP_PASS='super-secret' \
-  -v "$(pwd)/config.lua:/home/imap/.imapfilter/config.lua:ro" \
+  -v "$HOME/.config/imapfilter:/home/imap/.imapfilter:ro" \
   anyone/imapfilter
 ```
 
@@ -57,7 +57,7 @@ docker run --rm \
   -e IMAP_SERVER=imap.example.com \
   -e IMAP_USER=alice@example.com \
   -e IMAP_PASS='super-secret' \
-  -v "$(pwd)/config.lua:/home/imap/.imapfilter/config.lua:ro" \
+  -v "$HOME/.config/imapfilter:/home/imap/.imapfilter:ro" \
   anyone/imapfilter
 ```
 
@@ -72,7 +72,7 @@ docker run --rm \
   -e IMAP_SERVER=imap.example.com \
   -e IMAP_USER=alice@example.com \
   -e IMAP_PASS='super-secret' \
-  -v "$(pwd)/config.lua:/home/imap/.imapfilter/config.lua:ro" \
+  -v "$HOME/.config/imapfilter:/home/imap/.imapfilter:ro" \
   anyone/imapfilter
 ```
 
@@ -85,7 +85,7 @@ docker run --rm \
   -e IMAP_SERVER=imap.example.com \
   -e IMAP_USER=alice@example.com \
   -e IMAP_PASS_FILE=/run/secrets/imap_pass \
-  -v "$(pwd)/config.lua:/home/imap/.imapfilter/config.lua:ro" \
+  -v "$HOME/.config/imapfilter:/home/imap/.imapfilter:ro" \
   -v "$(pwd)/secrets/imap_pass:/run/secrets/imap_pass:ro" \
   anyone/imapfilter
 ```
@@ -107,6 +107,13 @@ docker run --rm \
 - `IMAPFILTER_ONCE=false`: run continuously, sleeping `IMAPFILTER_INTERVAL_SECONDS` between successful runs.
 - `IMAPFILTER_EXTRA_ARGS`: passed directly to `imapfilter`.  
   Example: `IMAPFILTER_EXTRA_ARGS="-n"` enables dry-run/no-op mode.
+
+### Single-account env model
+
+- This image expects one IMAP account per container run.
+- Use one set of account variables: `IMAP_SERVER`, `IMAP_USER`, `IMAP_PASS` (plus optional `IMAP_PORT`, `IMAP_SSL`).
+- Wildcard or indexed env variables like `IMAP_USER*` are not supported by default.
+- For multiple accounts, run multiple containers (each with its own env file) or implement custom multi-account logic in `config.lua`.
 
 ## Imapfilter config input variables
 

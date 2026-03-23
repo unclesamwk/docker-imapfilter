@@ -31,11 +31,11 @@ test: lint build
 run:
 	docker run -d \
 		--name imapfilter \
-		-v $(PWD)/config.lua:/home/imap/.imapfilter/config.lua:ro \
+		-v $(HOME)/.config/imapfilter:/home/imap/.imapfilter:ro \
 		$(IMAGE):$(TAG)
 
 run-once:
 	docker run --rm \
 		-e IMAPFILTER_ONCE=true \
-		-v $(PWD)/config.lua:/home/imap/.imapfilter/config.lua:ro \
+		-v $(HOME)/.config/imapfilter:/home/imap/.imapfilter:ro \
 		$(IMAGE):$(TAG)

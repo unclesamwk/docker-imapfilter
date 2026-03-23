@@ -46,7 +46,7 @@ resolve_secret_env "IMAP_SSL"
 
 if [[ ! -f "${CONFIG_PATH}" ]]; then
   echo "[imapfilter] Config not found: ${CONFIG_PATH}" >&2
-  echo "[imapfilter] Mount it with: -v \"$(pwd)/config.lua\":${CONFIG_PATH}:ro" >&2
+  echo "[imapfilter] Mount it with: -v \"$HOME/.config/imapfilter:/home/imap/.imapfilter:ro\"" >&2
   exit 1
 fi
 
