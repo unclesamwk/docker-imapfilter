@@ -1,9 +1,13 @@
--- Example IMAPFilter configuration.
+-- IMAPFilter configuration template
 --
--- Configure via environment variables in your container runtime:
---   IMAP_SERVER, IMAP_USER, IMAP_PASS
--- Optional:
---   IMAP_PORT (default: 993), IMAP_SSL (default: ssl23)
+-- Rule flow:
+-- 1) Protect important mail (never delete)
+-- 2) Classify newsletters and operational mail
+-- 3) Archive from inbox after short retention
+-- 4) Delete from archive after long retention
+--
+-- Recommended first run:
+--   IMAPFILTER_EXTRA_ARGS="-n"  (dry-run/no-op)
 
 options.timeout = 120
 options.subscribe = true
@@ -51,9 +55,9 @@ local server = get_env_or_file('IMAP_SERVER', true)
 local username = get_env_or_file('IMAP_USER', true)
 local password = get_env_or_file('IMAP_PASS', true)
 local port = tonumber(get_env_or_file('IMAP_PORT', false) or '993')
-local ssl = get_env_or_file('IMAP_SSL', false) or 'ssl23'
+local ssl = get_env_or_file('IMAP_SSL', false) or 'auto'
 
-account = IMAP {
+local account = IMAP {
   server = server,
   username = username,
   password = password,
@@ -61,9 +65,103 @@ account = IMAP {
   ssl = ssl,
 }
 
--- Example rule: move unread newsletter mails into "Newsletters".
-local newsletters = account.INBOX:is_unseen() *
-  account.INBOX:contain_from('newsletter@example.com')
+-- Mailbox names (override by env if needed)
+local archive_box = os.getenv('IMAP_ARCHIVE_MAILBOX') or 'Archive'
+local newsletters_box = os.getenv('IMAP_NEWSLETTERS_MAILBOX') or 'Newsletters'
+local ops_box = os.getenv('IMAP_OPS_MAILBOX') or 'Operations'
 
-pcall(function() account:create_mailbox('Newsletters') end)
-newsletters:move_messages(account.Newsletters)
+pcall(function() account:create_mailbox(archive_box) end)
+pcall(function() account:create_mailbox(newsletters_box) end)
+pcall(function() account:create_mailbox(ops_box) end)
+
+local inbox = account.INBOX
+local archive = account[archive_box]
+local newsletters = account[newsletters_box]
+local ops = account[ops_box]
+
+local function union_contains_from(box, patterns)
+  local set = box:contain_from(patterns[1])
+  for i = 2, #patterns do
+    set = set + box:contain_from(patterns[i])
+  end
+  return set
+end
+
+local function union_contains_subject(box, patterns)
+  local set = box:contain_subject(patterns[1])
+  for i = 2, #patterns do
+    set = set + box:contain_subject(patterns[i])
+  end
+  return set
+end
+
+-- Keep domains / senders (never delete)
+-- Replace these examples with your real domains/senders.
+local keep_sender_patterns = {
+  'family.example',
+  'personal.example',
+  'business.example',
+  'billing.example',
+  'bank.example',
+  'hosting.example',
+}
+
+-- Subject keywords to protect (never delete)
+local protect_subject_keywords = {
+  'Rechnung', 'Invoice', 'Bestellung', 'Order', 'Versand',
+  'Lizenz', 'License', 'Zugang', 'Login', 'Passwort',
+  'Spendenbescheinigung', 'Zuwendungsbest',
+}
+
+-- Conversation detection (Re:, Fwd:, Aw:, Wg:)
+local protected_conversations = inbox:match_header('^Subject: *(Re:|Fwd:|Aw:|Wg:)')
+local protected_senders = union_contains_from(inbox, keep_sender_patterns)
+local protected_subjects = union_contains_subject(inbox, protect_subject_keywords)
+local protected_set = protected_conversations + protected_senders + protected_subjects
+
+-- Newsletter detection (smart baseline)
+local newsletter_sender_patterns = {
+  'noreply@', 'no-reply@', 'newsletter@', 'news@', 'promo@',
+  'marketing@', 'campaign@', 'deals@', 'offers@', 'sale@',
+  'digest@', 'updates@', 'notifications@', 'mailer@', 'bulk@',
+}
+
+-- Not every info/hello/team mail is a newsletter; do not add those by default.
+local newsletter_candidates = union_contains_from(inbox, newsletter_sender_patterns)
+
+-- Inbox lifecycle: move newsletter candidates to Newsletters after 3 days
+local newsletters_to_move = (newsletter_candidates - protected_set) * inbox:is_older(3)
+newsletters_to_move:move_messages(newsletters)
+
+-- Ops notifications lifecycle examples
+local ops_candidates = inbox:contain_from('status@') +
+  inbox:contain_subject('maintenance') +
+  inbox:contain_subject('incident')
+local ops_to_move = (ops_candidates - protected_set) * inbox:is_older(1)
+ops_to_move:move_messages(ops)
+
+-- General inbox archive rule after 7 days (except protected and already handled sets)
+local already_handled = newsletters_to_move + ops_to_move
+local generic_archive = (inbox:select_all() - protected_set - already_handled) * inbox:is_older(7)
+generic_archive:move_messages(archive)
+
+-- Immediate cleanup examples
+local immediate_delete = inbox:contain_from('tracki') + inbox:contain_subject('TESTMODUS') * inbox:is_older(7)
+immediate_delete:delete_messages()
+
+-- Archive retention rules
+-- Newsletters: delete after 90 days, but keep protected mail
+local nl_protected = union_contains_from(newsletters, keep_sender_patterns) +
+  union_contains_subject(newsletters, protect_subject_keywords) +
+  newsletters:match_header('^Subject: *(Re:|Fwd:|Aw:|Wg:)')
+local nl_delete = (newsletters:select_all() - nl_protected) * newsletters:is_older(90)
+nl_delete:delete_messages()
+
+-- Operations notifications: delete after 365 days
+local ops_delete = ops:select_all() * ops:is_older(365)
+ops_delete:delete_messages()
+
+-- Generic archive cleanup example for low-value automated mails after 365 days
+local archive_low_value = archive:contain_from('noreply@') + archive:contain_from('no-reply@')
+local archive_delete = (archive_low_value - union_contains_from(archive, keep_sender_patterns)) * archive:is_older(365)
+archive_delete:delete_messages()

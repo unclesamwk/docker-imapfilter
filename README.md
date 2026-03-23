@@ -123,7 +123,78 @@ The provided `config.lua` reads these variables (value or `*_FILE` variant):
 - `IMAP_USER`
 - `IMAP_PASS`
 - `IMAP_PORT` (optional, default `993`)
-- `IMAP_SSL` (optional, default `ssl23`)
+- `IMAP_SSL` (optional, default `auto`)
+
+## What is possible with imapfilter?
+
+Common operations include:
+
+- move messages between folders
+- copy messages to other folders/accounts
+- delete messages
+- set/unset flags (seen, flagged, etc.)
+- filter by sender, subject, header, body, age, size, read/unread, recent
+- combine filters with `*` (AND), `+` (OR), `-` (EXCEPT)
+
+### Rule examples (Lua)
+
+```lua
+-- Base account from env vars (as in this repository)
+account = IMAP {
+  server = os.getenv('IMAP_SERVER'),
+  username = os.getenv('IMAP_USER'),
+  password = os.getenv('IMAP_PASS'),
+  port = tonumber(os.getenv('IMAP_PORT') or '993'),
+  ssl = os.getenv('IMAP_SSL') or 'auto',
+}
+
+-- 1) Move unread newsletters into "Newsletters"
+pcall(function() account:create_mailbox('Newsletters') end)
+local newsletters = account.INBOX:is_unseen() *
+  account.INBOX:contain_from('newsletter@example.com')
+newsletters:move_messages(account.Newsletters)
+
+-- 2) Delete obvious spam by subject
+local spam = account.INBOX:contain_subject('[SPAM]')
+spam:delete_messages()
+
+-- 3) Mark important mails as flagged
+local important = account.INBOX:contain_from('boss@example.com') +
+  account.INBOX:contain_subject('urgent')
+important:mark_flagged()
+
+-- 4) Archive old notifications (>30 days)
+pcall(function() account:create_mailbox('Archive') end)
+local old_notifications = account.INBOX:contain_from('no-reply@example.com') *
+  account.INBOX:is_older(30)
+old_notifications:move_messages(account.Archive)
+
+-- 5) Complex filter: unread from A or B, but not matching body pattern
+local filtered = (
+  account.INBOX:is_unseen() *
+  (account.INBOX:contain_from('a@example.com') +
+   account.INBOX:contain_from('b@example.com'))
+) - account.INBOX:match_body('.*ignore-this-pattern.*')
+filtered:mark_seen()
+```
+
+### Dry-run first (recommended)
+
+Test rules safely without applying changes:
+
+```bash
+docker run --rm \
+  --env-file "$HOME/.config/imapfilter/.env" \
+  -e IMAPFILTER_ONCE=true \
+  -e IMAPFILTER_EXTRA_ARGS="-n" \
+  -v "$HOME/.config/imapfilter:/home/imap/.imapfilter:ro" \
+  anyone/imapfilter
+```
+
+Official references:
+
+- `imapfilter_config(5)`: https://raw.githubusercontent.com/lefcha/imapfilter/master/doc/imapfilter_config.5
+- sample config: https://raw.githubusercontent.com/lefcha/imapfilter/master/samples/config.lua
 
 ## Local developer commands
 
