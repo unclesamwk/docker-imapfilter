@@ -147,7 +147,7 @@ The workflow [docker-publish.yml](/Users/swarkentin/GIT/private/docker-imapfilte
 Set these repository secrets:
 
 - `DOCKERHUB_USERNAME`
-- `DOCKERHUB_TOKEN` (Docker Hub access token)
+- `DOCKERHUB_PASSWORD` (Docker Hub password or access token)
 
 Published image name:
 
