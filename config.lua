@@ -1,129 +1,69 @@
----------------
---  Options  --
----------------
+-- Example IMAPFilter configuration.
+--
+-- Configure via environment variables in your container runtime:
+--   IMAP_SERVER, IMAP_USER, IMAP_PASS
+-- Optional:
+--   IMAP_PORT (default: 993), IMAP_SSL (default: ssl23)
 
 options.timeout = 120
 options.subscribe = true
 
+local function trim(s)
+  return (s:gsub('^%s+', ''):gsub('%s+$', ''))
+end
 
-----------------
---  Accounts  --
-----------------
+local function read_file(path)
+  local file = io.open(path, 'r')
+  if not file then
+    return nil
+  end
+  local content = file:read('*a')
+  file:close()
+  if not content then
+    return nil
+  end
+  return trim(content)
+end
 
--- Connects to "imap1.mail.server", as user "user1" with "secret1" as
--- password.
-account1 = IMAP {
-    server = 'imap1.mail.server',
-    username = 'user1',
-    password = 'secret1',
+local function get_env_or_file(name, required)
+  local value = os.getenv(name)
+  local file_path = os.getenv(name .. '_FILE')
+
+  if value and file_path then
+    error('Set only one of ' .. name .. ' or ' .. name .. '_FILE')
+  end
+
+  if file_path then
+    value = read_file(file_path)
+    if not value or value == '' then
+      error('Failed to read value from ' .. name .. '_FILE at ' .. file_path)
+    end
+  end
+
+  if required and (not value or value == '') then
+    error('Missing required env var: ' .. name .. ' (or ' .. name .. '_FILE)')
+  end
+
+  return value
+end
+
+local server = get_env_or_file('IMAP_SERVER', true)
+local username = get_env_or_file('IMAP_USER', true)
+local password = get_env_or_file('IMAP_PASS', true)
+local port = tonumber(get_env_or_file('IMAP_PORT', false) or '993')
+local ssl = get_env_or_file('IMAP_SSL', false) or 'ssl23'
+
+account = IMAP {
+  server = server,
+  username = username,
+  password = password,
+  port = port,
+  ssl = ssl,
 }
 
--- Another account which connects to the mail server using the SSLv3
--- protocol.
-account2 = IMAP {
-    server = 'imap2.mail.server',
-    username = 'user2',
-    password = 'secret2',
-    ssl = 'ssl23',
-}
+-- Example rule: move unread newsletter mails into "Newsletters".
+local newsletters = account.INBOX:is_unseen() *
+  account.INBOX:contain_from('newsletter@example.com')
 
--- Get a list of the available mailboxes and folders
-mailboxes, folders = account1:list_all()
-
--- Get a list of the subscribed mailboxes and folders
-mailboxes, folders = account1:list_subscribed()
-
--- Create a mailbox
-account1:create_mailbox('Friends')
-
--- Subscribe a mailbox
-account1:subscribe_mailbox('Friends')
-
-
------------------
---  Mailboxes  --
------------------
-
--- Get the status of a mailbox
-account1.INBOX:check_status()
-
--- Get all the messages in the mailbox.
-results = account1.INBOX:select_all()
-
--- Get newly arrived, unread messages
-results = account1.INBOX:is_new()
-
--- Get unseen messages with the specified "From" header.
-results = account1.INBOX:is_unseen() *
-          account1.INBOX:contain_from('weekly-news@news.letter')
-
--- Copy messages between mailboxes at the same account.
-results:copy_messages(account1.news)
-
--- Get messages with the specified "From" header but without the
--- specified "Subject" header.
-results = account1.INBOX:contain_from('announce@my.unix.os') -
-          account1.INBOX:contain_subject('security advisory')
-
--- Copy messages between mailboxes at a different account.
-results:copy_messages(account2.security)
-
--- Get messages with any of the specified headers.
-results = account1.INBOX:contain_from('marketing@company.junk') +
-          account1.INBOX:contain_from('advertising@annoying.promotion') +
-          account1.INBOX:contain_subject('new great products')
-
--- Delete messages.
-results:delete_messages()
-
--- Get messages with the specified "Sender" header, which are older than
--- 30 days.
-results = account1.INBOX:contain_field('sender', 'owner@announce-list') *
-          account1.INBOX:is_older(30)
-
--- Move messages to the "announce" mailbox inside the "lists" folder.
-results:move_messages(account1['lists/announce'])
-
--- Get messages, in the "devel" mailbox inside the "lists" folder, with the
--- specified "Subject" header and a size less than 50000 octets (bytes).
-results = account1['lists/devel']:contain_subject('[patch]') *
-          account1['lists/devel']:is_smaller(50000)
-
--- Move messages to the "patch" mailbox.
-results:move_messages(account2.patch)
-
--- Get recent, unseen messages, that have either one of the specified
--- "From" headers, but do not have the specified pattern in the body of
--- the message.
-results = ( account1.INBOX:is_recent() *
-            account1.INBOX:is_unseen() *
-            ( account1.INBOX:contain_from('tux@penguin.land') +
-              account1.INBOX:contain_from('beastie@daemon.land') ) ) -
-          account1.INBOX:match_body('.*all.work.and.no.play.*')
-
--- Mark messages as important.
-results:mark_flagged()
-
--- Get all messages in two mailboxes residing in the same server.
-results = account1.news:select_all() +
-          account1.security:select_all()
-
--- Mark messages as seen.
-results:mark_seen()
-
--- Get recent messages in two mailboxes residing in different servers.
-results = account1.INBOX:is_recent() +
-          account2.INBOX:is_recent()
-
--- Flag messages as seen and important.
-results:add_flags({ '\\Seen', '\\Flagged' })
-
--- Get unseen messages.
-results = account1.INBOX:is_unseen()
-
--- From the messages that were unseen, match only those with the specified
--- regular expression in the header.
-newresults = results:match_header('^.+MailScanner.*Check: [Ss]pam$')
-
--- Delete those messages.
-newresults:delete_messages()
+pcall(function() account:create_mailbox('Newsletters') end)
+newsletters:move_messages(account.Newsletters)
