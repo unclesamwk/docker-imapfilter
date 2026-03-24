@@ -230,3 +230,8 @@ Set these repository secrets:
 Published image name:
 
 - `${DOCKERHUB_USERNAME}/docker-imapfilter`
+
+Docker Hub profile text files in this repository:
+
+- short description: [.dockerhub-description.txt](/Users/swarkentin/GIT/private/docker-imapfilter/.dockerhub-description.txt)
+- full Docker Hub README: [DOCKERHUB.md](/Users/swarkentin/GIT/private/docker-imapfilter/DOCKERHUB.md)
