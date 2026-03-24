@@ -76,6 +76,36 @@ docker run --rm \
   anyone/imapfilter
 ```
 
+## Stdout / Verbose output
+
+imapfilter is quiet by default. To see what it is doing, enable verbose mode:
+
+```bash
+docker run --rm \
+  --env-file "$HOME/.config/imapfilter/.env" \
+  -e IMAPFILTER_ONCE=true \
+  -e IMAPFILTER_EXTRA_ARGS="-v" \
+  -v "$HOME/.config/imapfilter:/home/imap/.imapfilter:ro" \
+  anyone/imapfilter
+```
+
+Safe test mode with dry-run + verbose:
+
+```bash
+docker run --rm \
+  --env-file "$HOME/.config/imapfilter/.env" \
+  -e IMAPFILTER_ONCE=true \
+  -e IMAPFILTER_EXTRA_ARGS="-n -v" \
+  -v "$HOME/.config/imapfilter:/home/imap/.imapfilter:ro" \
+  anyone/imapfilter
+```
+
+For long-running containers:
+
+```bash
+docker logs -f imapfilter
+```
+
 ## Secrets via files
 
 Instead of plain env vars, you can provide file-based secrets:

@@ -12,6 +12,10 @@
 options.timeout = 120
 options.subscribe = true
 
+local function log(msg)
+  print(os.date('%Y-%m-%dT%H:%M:%S') .. ' [imapfilter] ' .. msg)
+end
+
 local function trim(s)
   return (s:gsub('^%s+', ''):gsub('%s+$', ''))
 end
@@ -95,6 +99,17 @@ local function union_contains_subject(box, patterns)
   return set
 end
 
+local function apply_rule(rule_name, rationale, set, action_name, action_fn)
+  log('rule=' .. rule_name .. ' action=' .. action_name .. ' rationale="' .. rationale .. '"')
+  if set:check_status() then
+    log('rule=' .. rule_name .. ' matched=true')
+    action_fn(set)
+    log('rule=' .. rule_name .. ' action=' .. action_name .. ' status=done')
+  else
+    log('rule=' .. rule_name .. ' matched=false')
+  end
+end
+
 -- Keep domains / senders (never delete)
 -- Replace these examples with your real domains/senders.
 local keep_sender_patterns = {
@@ -131,23 +146,47 @@ local newsletter_candidates = union_contains_from(inbox, newsletter_sender_patte
 
 -- Inbox lifecycle: move newsletter candidates to Newsletters after 3 days
 local newsletters_to_move = (newsletter_candidates - protected_set) * inbox:is_older(3)
-newsletters_to_move:move_messages(newsletters)
+apply_rule(
+  'newsletter_archive',
+  'newsletter sender pattern + older than 3 days; protected mail excluded',
+  newsletters_to_move,
+  'move->' .. newsletters_box,
+  function(set) set:move_messages(newsletters) end
+)
 
 -- Ops notifications lifecycle examples
 local ops_candidates = inbox:contain_from('status@') +
   inbox:contain_subject('maintenance') +
   inbox:contain_subject('incident')
 local ops_to_move = (ops_candidates - protected_set) * inbox:is_older(1)
-ops_to_move:move_messages(ops)
+apply_rule(
+  'ops_archive',
+  'ops/status style mail + older than 1 day; protected mail excluded',
+  ops_to_move,
+  'move->' .. ops_box,
+  function(set) set:move_messages(ops) end
+)
 
 -- General inbox archive rule after 7 days (except protected and already handled sets)
 local already_handled = newsletters_to_move + ops_to_move
 local generic_archive = (inbox:select_all() - protected_set - already_handled) * inbox:is_older(7)
-generic_archive:move_messages(archive)
+apply_rule(
+  'generic_archive',
+  'inbox mail older than 7 days, excluding protected and already handled sets',
+  generic_archive,
+  'move->' .. archive_box,
+  function(set) set:move_messages(archive) end
+)
 
 -- Immediate cleanup examples
 local immediate_delete = inbox:contain_from('tracki') + inbox:contain_subject('TESTMODUS') * inbox:is_older(7)
-immediate_delete:delete_messages()
+apply_rule(
+  'immediate_delete',
+  'tracki notifications immediately or TESTMODUS older than 7 days',
+  immediate_delete,
+  'delete',
+  function(set) set:delete_messages() end
+)
 
 -- Archive retention rules
 -- Newsletters: delete after 90 days, but keep protected mail
@@ -155,13 +194,31 @@ local nl_protected = union_contains_from(newsletters, keep_sender_patterns) +
   union_contains_subject(newsletters, protect_subject_keywords) +
   newsletters:match_header('^Subject: *(Re:|Fwd:|Aw:|Wg:)')
 local nl_delete = (newsletters:select_all() - nl_protected) * newsletters:is_older(90)
-nl_delete:delete_messages()
+apply_rule(
+  'newsletter_retention_delete',
+  'newsletter folder messages older than 90 days, except protected',
+  nl_delete,
+  'delete',
+  function(set) set:delete_messages() end
+)
 
 -- Operations notifications: delete after 365 days
 local ops_delete = ops:select_all() * ops:is_older(365)
-ops_delete:delete_messages()
+apply_rule(
+  'ops_retention_delete',
+  'operations folder messages older than 365 days',
+  ops_delete,
+  'delete',
+  function(set) set:delete_messages() end
+)
 
 -- Generic archive cleanup example for low-value automated mails after 365 days
 local archive_low_value = archive:contain_from('noreply@') + archive:contain_from('no-reply@')
 local archive_delete = (archive_low_value - union_contains_from(archive, keep_sender_patterns)) * archive:is_older(365)
-archive_delete:delete_messages()
+apply_rule(
+  'archive_low_value_delete',
+  'archive low-value automated mail older than 365 days, except keep-domain matches',
+  archive_delete,
+  'delete',
+  function(set) set:delete_messages() end
+)
